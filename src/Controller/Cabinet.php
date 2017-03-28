@@ -2,74 +2,91 @@
 
 namespace App\Controller;
 
-use \PDO;
-use Symfony\Component\HttpFoundation\RedirectResponse;
+use Silex\Application;
+use Symfony\Component\HttpFoundation\Request;
+
+use App\Model\SourceMapper;
+use App\Model\SourceEntity;
+use Symfony\Component\Validator\Constraints as Assert;
 
 class Cabinet
 {
-    public function getIndex($request, $response)
+    public static function _before(Request $request, Application $app)
     {
         $logged = $request->getSession()->get('logged');
-        if ($logged) {
+        if (! $logged) $app->abort(403, 'Forbidden.');
+    }
 
-            $db = new PDO("mysql:host=localhost;dbname=sg_news;charset=utf8", "root", "123");
-            $sql = "SELECT * FROM sources ORDER BY id DESC LIMIT 50";
-            $stmt = $db->prepare($sql);
-            $stmt->execute();
-            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $response->setContent(include '../templates/cabinet.tpl.php');
-        } else {
-            $response->setStatusCode('403');
-            $response->setContent('Forbidden.');
+    public function getIndex(Request $request, Application $app)
+    {
+        $mapper = new SourceMapper($app['db']);
+        $sources = $mapper->getSources();
+        $errors = $request->getSession()->getFlashBag()->get('errors', array());
+        if (count($errors)>0) {
+            foreach ($errors as $error) {
+                var_dump($error); 
+                echo '<div class="flash-notice">'.$error.'</div>';
+            }
+die();
         }
-
-        return $response;
+       
+      
+        $app['view.name'] = 'cabinet';
+        return $app['view']->data(['sources' => $sources])->render();
     }
 
-    public function addFeed($request)
+    public function postAddSource(Request $request, Application $app)
     {
-        date_default_timezone_set('Europe/Kiev');
-        $db = new PDO("mysql:host=localhost;dbname=sg_news;charset=utf8", "root", "123"); 
-        $sql = "INSERT IGNORE INTO sources (name, link, feed) VALUES (?, ?, ?)"; 
-        $stmt = $db->prepare($sql);
+        $data = $request->request->all();
+        //var_dump($data); die();
+        
+        $constraints = new Assert\Collection(array(
+            'name' => new Assert\Length(array('min' => 3)),
+            'source_link' => new Assert\Url(),
+            'rss_feed_link' => new Assert\Url()
+        ));
+        //var_dump($source);     die();
+        $errors = $app['validator']->validate($data, $constraints);
+        if (count($errors) > 0) {
+            $request->getSession()->getFlashBag()->add('errors', $errors);
+            //$all_errors = $errors;
+        // } 
+        // $errors = $app['validator']->validate($source->getRssFeedLink(), new Assert\Url());
+        // if (count($errors) > 0) {
+            
+        //     $all_errors->addAll($errors);
+        // } 
+        //var_dump($all_errors); die();
+        // if (count($errors) > 0) {
+//             //$request->getSession()->getFlashBag()->add('errors', $all_errors);
+//             //$app['session']->getFlashBag()->add('example', 'Some example flash message');
+//             //return $app->redirect('redirect-to-some-route');
+//             //return (string) $all_errors;
+            $es = $request->getSession()->getFlashBag()->get('errors',array());
+            //var_dump(count($errors));
+            foreach ($es as $error) {
+                var_dump($error);    
+                echo '<div class="flash-error"><br>\n\n</div>';
+            }
+    die();
+            return $app->redirect('/cabinet');
+        }
+        $source = new SourceEntity($data);
+        $mapper = new SourceMapper($app['db']);
+        $mapper->save($source);
 
-        $name = $request->request->get('name');
-        $link = $request->request->get('link');
-        $feed = $request->request->get('feed');
-        $stmt->execute([$name, $link, $feed]);
-        return new RedirectResponse('/cabinet');
+        return $app->redirect('/cabinet');
     }
 
-    public function deleteSource($request)
+    public function postDisableSource(Request $request, Application $app, $id)
     {
-        $db = new PDO("mysql:host=localhost;dbname=sg_news;charset=utf8", "root", "123"); 
-        $sql = "DELETE FROM sources WHERE id = ?"; 
-        $stmt = $db->prepare($sql);
-        $id = $request->request->get('id');
-        $stmt->execute([$id]);
-        return new RedirectResponse('/cabinet');
-    }
+        $mapper = new SourceMapper($app['db']);
+        $data = $mapper->getSourceById($id);
+        $data['is_active'] = ! $data['is_active'];
 
-    public function deleteFeeds($request, $response)
-    {
-        echo "deleteFeed<br>";
-        //var_dump($response);
-        $db = new PDO("mysql:host=localhost;dbname=sg_news;charset=utf8", "root", "123"); 
-        $sql = "DELETE FROM news"; 
-        $count = $db->exec($sql);
-        $response->setContent("Deleted $count records");
-        return $response; //new RedirectResponse('/cabinet');
-    }
-    // public function postAddItem($request, $response)
-    // {
-    //     $logged = $request->getSession()->get('logged');
-    //     if ($logged) {
-    //         $response->setContent('CABINET');
-    //     } else {
-    //         $response->setStatusCode('403');
-    //         $response->setContent('Forbidden.');
-    //     }
+        $source = new SourceEntity($data);
+        $mapper->save($source);
 
-    //     return $response;
-    // }
+        return $app->redirect('/cabinet');
+    }
 }

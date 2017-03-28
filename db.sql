@@ -27,6 +27,9 @@ CHANGE `description` `description` mediumtext COLLATE 'utf8_general_ci' NOT NULL
 CREATE TABLE `sources` (
   `id` int unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `name` varchar(255) NOT NULL,
-  `link` varchar(255) NOT NULL,
-  `feed` varchar(255) NOT NULL
+  `source_link` varchar(255) NOT NULL,
+  `rss_feed_link` varchar(255) NOT NULL
 ) ENGINE='InnoDB';
+
+# alter table: add column
+ALTER TABLE `sources` ADD `is_active` BOOLEAN NOT NULL DEFAULT true;

@@ -2,33 +2,45 @@
 
 require_once 'vendor/autoload.php';
 
+use App\Model;
+
 date_default_timezone_set('Europe/Kiev');
 
-$db = new PDO("mysql:host=localhost;dbname=rss_news;charset=utf8", "root", "123");
-$sql = "INSERT IGNORE INTO news (title, link, description, source, pub_date) VALUES (?, ?, ?, ?, ?)";
-$stmt = $db->prepare($sql);
+$connectionParams = array(
+    'driver' => 'pdo_mysql',
+    'host' => 'localhost',
+    'dbname' => 'rss_news',
+    'user' => 'root',
+    'password' => '123',
+    'charset'   => 'utf8mb4',
+);
+$config = new \Doctrine\DBAL\Configuration;
+$db = \Doctrine\DBAL\DriverManager::getConnection($connectionParams, $config);
 
-$feed_urls = [
-    'http://www.pravda.com.ua/rss/',
-    'http://football.ua/rss2.ashx',
-    'https://rss.unian.net/site/news_ukr.rss',
-];
+$feed_urls = [];
+$source_mapper = new Model\SourceMapper($db);
+$sources = $source_mapper->getSources();
+
+foreach ($sources as $source) {
+    if ($source->isActive()) $feed_urls[] = $source->getRssFeedLink();
+}
 
 $feed = new SimplePie();
 $feed->enable_cache(false);
-// $feed->enable_order_by_date(false);
-
 $feed->set_feed_url($feed_urls);
 $feed->init();
 
 $items = $feed->get_items();
+$news_mapper = new Model\NewsMapper($db);
 
 foreach ($items as $item) {
-    $stmt->execute([
-        $item->get_title(),
-        $item->get_link(),
-        $item->get_description(),
-        $item->get_feed()->get_link(),
-        $item->get_date("Y-m-d H:i:s"),
+    $news = new Model\NewsEntity([
+        'title'       => $item->get_title(),
+        'link'        => $item->get_link(),
+        'description' => $item->get_description(),
+        'source'      => $item->get_feed()->get_link(),
+        'pub_date'    => $item->get_date("Y-m-d H:i:s"),
     ]);
+
+    $news_mapper->save($news);
 }

@@ -2,38 +2,33 @@
 
 namespace App\Controller;
 
-use \PDO;
-use Symfony\Component\HttpFoundation\RedirectResponse;
+use Silex\Application;
+use Symfony\Component\HttpFoundation\Request;
+
+use App\Model\NewsMapper;
+use App\Model\NewsEntity;
 
 class Front
 {
-    public function getIndex($request, $response)
+    public function getIndex(Request $request, Application $app)
     {
-        $db = new PDO("mysql:host=localhost;dbname=sg_news;charset=utf8", "root", "123");
-        $sql = "SELECT * FROM news ORDER BY id DESC LIMIT 50";
-        $stmt = $db->prepare($sql);
-        $stmt->execute();
-        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
- //$t = include '../templates/index.tpl.php';
- //echo "[$t]";
-        ob_start();
-        include '../templates/index.tpl.php';
-        //return ob_get_clean();
-        //return $html;
-        $response->setContent(ob_get_clean());//include '../templates/index.tpl.php');
-        return $response;
+        $mapper = new NewsMapper($app['db']);
+        $items = $mapper->getNews();
+
+        $logged = $request->getSession()->get('logged');
+
+        $app['view.name'] = 'index';
+        return $app['view']->data(['items' => $items, 'logged' => $logged])->render();
+        // return include '../templates/index.tpl.php';
     }
     
-    public function getLogin($request, $response)
+    public function getLogin(Request $request, Application $app)
     {
-        return $response->setContent('<form action="/login" method="POST">
-            <input name="name">
-            <input name="pass">
-            <input type="submit">
-        </form>');
+        $app['view.name'] = 'login';
+        return $app['view']->render();
     }
 
-    public function postLogin($request)
+    public function postLogin(Request $request, Application $app)
     {
         $login = $request->request->get('name');
         $pass = $request->request->get('pass');
@@ -41,17 +36,18 @@ class Front
         $session = $request->getSession();
         if ($login == 'test' && $pass == '123') {
             $session->set('logged', true);
-            return new RedirectResponse('/cabinet');
+            return $app->redirect('/cabinet');
         }
 
-        return new RedirectResponse('/login');
+        return $app->redirect('/login');
     }
 
-    public function getLogout($request, $response)
+    public function getLogout(Request $request, Application $app)
     {
         $session = $request->getSession();
+        $session->clear();
         $session->invalidate();
 
-        return new RedirectResponse('/');
+        return $app->redirect('/');
     }
 }
